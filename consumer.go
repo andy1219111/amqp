@@ -32,7 +32,20 @@ func NewConsumer(uri, exchange, exchangeType, queue, routingKey string) (*Consum
 	if err != nil {
 		return nil, err
 	}
+
 	consumer.Session = session
+	err = session.ch.ExchangeDeclare(
+		consumer.exchangeName, // name of the exchange
+		consumer.exchangeType, // type
+		true,                  // durable
+		false,                 // delete when complete
+		false,                 // internal
+		false,                 // noWait
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	consumer.Queue, err = session.ch.QueueDeclare(
 		queue, // name
@@ -53,7 +66,7 @@ func NewConsumer(uri, exchange, exchangeType, queue, routingKey string) (*Consum
 		false,
 		nil)
 	if err != nil {
-		return consumer, err
+		return nil, err
 	}
 
 	return consumer, nil
@@ -93,6 +106,7 @@ func (c *Consumer) Connect() (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	s.conn = conn
 	s.ch = channel
 	return s, err
