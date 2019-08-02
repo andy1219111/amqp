@@ -1,10 +1,9 @@
 # amqp
 对streadway/amqp库的二次封装
 
-#消费者的栗子
+# 消费者的栗子
 
-```
-
+```golang
 //建立消费者
 	consumer, err := uamqp.NewConsumer(
 		configObj.Amqp["url"],
@@ -25,4 +24,5 @@
     fmt.Print(dataBody.Body)
     dataBody.Ack(false)
   }
+  
 ```
