@@ -1,6 +1,9 @@
 package amqp
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/streadway/amqp"
 )
 
@@ -15,9 +18,9 @@ type Consumer struct {
 }
 
 type Session struct {
-	ch      *amqp.Channel
-	conn    *amqp.Connection
-	errChan chan *amqp.Error
+	Ch      *amqp.Channel
+	Conn    *amqp.Connection
+	ErrChan chan *amqp.Error
 }
 
 func NewConsumer(uri, exchange, exchangeType, queue, routingKey string) (*Consumer, error) {
@@ -34,7 +37,12 @@ func NewConsumer(uri, exchange, exchangeType, queue, routingKey string) (*Consum
 	}
 
 	consumer.Session = session
-	err = session.ch.ExchangeDeclare(
+	//确保rabbitMQ一个一个发送消息
+	err = consumer.Session.Ch.Qos(200, 0, true)
+	if err != nil {
+		return nil, err
+	}
+	err = session.Ch.ExchangeDeclare(
 		consumer.exchangeName, // name of the exchange
 		consumer.exchangeType, // type
 		true,                  // durable
@@ -47,7 +55,7 @@ func NewConsumer(uri, exchange, exchangeType, queue, routingKey string) (*Consum
 		return nil, err
 	}
 
-	consumer.Queue, err = session.ch.QueueDeclare(
+	consumer.Queue, err = session.Ch.QueueDeclare(
 		queue, // name
 		true,  // durable  持久性的,如果事前已经声明了该队列，不能重复声明
 		false, // delete when unused
@@ -59,7 +67,7 @@ func NewConsumer(uri, exchange, exchangeType, queue, routingKey string) (*Consum
 		return consumer, err
 	}
 	// 队列和交换机绑定，即是队列订阅了发到这个交换机的消息
-	err = session.ch.QueueBind(
+	err = session.Ch.QueueBind(
 		consumer.Queue.Name,
 		routingKey,
 		exchange,
@@ -73,7 +81,7 @@ func NewConsumer(uri, exchange, exchangeType, queue, routingKey string) (*Consum
 }
 
 func (c *Consumer) Consume() (<-chan amqp.Delivery, error) {
-	msg, err := c.Session.ch.Consume(
+	msg, err := c.Session.Ch.Consume(
 		c.queueName, // queue
 		"",          // consumer
 		false,       // auto-ack   设置为真自动确认消息
@@ -90,7 +98,7 @@ func (c *Consumer) Consume() (<-chan amqp.Delivery, error) {
 
 func (c *Consumer) Connect() (*Session, error) {
 	errChan := make(chan *amqp.Error)
-	s := &Session{errChan: errChan}
+	s := &Session{ErrChan: errChan}
 	conn, err := amqp.Dial(c.uri)
 	if err != nil {
 		return nil, err
@@ -98,7 +106,7 @@ func (c *Consumer) Connect() (*Session, error) {
 	go func() {
 		errs := conn.NotifyClose(make(chan *amqp.Error))
 		for err := range errs {
-			s.errChan <- err
+			s.ErrChan <- err
 		}
 	}()
 
@@ -107,12 +115,32 @@ func (c *Consumer) Connect() (*Session, error) {
 		return nil, err
 	}
 
-	s.conn = conn
-	s.ch = channel
+	s.Conn = conn
+	s.Ch = channel
 	return s, err
 }
 
+func (c *Consumer) ReConnect() {
+	tikcer := time.NewTicker(time.Second * 3)
+	for range tikcer.C {
+		fmt.Println("start to reconnect....")
+		var err error
+		c.Session.Conn, err = amqp.Dial(c.uri)
+		if err != nil {
+			fmt.Print(err)
+			continue
+		}
+		c.Session.Ch, err = c.Session.Conn.Channel()
+		if err != nil {
+			fmt.Print(err)
+			continue
+		}
+		fmt.Println("reconnect success....")
+		break
+	}
+}
+
 func (c *Consumer) Close() {
-	c.Session.ch.Close()
-	c.Session.conn.Close()
+	c.Session.Ch.Close()
+	c.Session.Conn.Close()
 }
