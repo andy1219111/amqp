@@ -8,18 +8,16 @@ import (
 type Producer struct {
 	ExchangeName string
 	ExchangeType string
-	RoutingKey   string
 	Session      *Session
 	Ch           *amqp.Channel
 }
 
 //NewProducer 得到生产者对象
-func NewProducer(session *Session, exchangeName, exchangeType, routingKey string) (*Producer, error) {
+func NewProducer(session *Session, exchangeName, exchangeType string) (*Producer, error) {
 	producer := &Producer{
 		Session:      session,
 		ExchangeName: exchangeName,
 		ExchangeType: exchangeType,
-		RoutingKey:   routingKey,
 	}
 	channel, err := producer.Session.Conn.Channel()
 	if err != nil {
